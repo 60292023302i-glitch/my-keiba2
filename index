@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>競馬投票ページ（リアルタイム版）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #f8f8f8; padding:20px; }
+    .horse { margin: 10px; padding: 15px; background: white; display: inline-block; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 120px; }
+    .horse.disabled { opacity: 0.5; cursor: default; }
+    .horse:hover { background: #e0f7fa; }
+    h2 { color: #333; }
+    #message { margin-top:20px;font-size:18px; min-height:28px; }
+    #info { margin-top:10px; color:#666; font-size:13px; }
+  </style>
+</head>
+<body>
+  <h1>🏇 競馬予想大会 🏇</h1>
+  <h2>あなたが勝つと思う馬を選んでください</h2>
+
+  <div id="horses"></div>
+  <div id="message"></div>
+  <div id="info"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import {
+      getDatabase, ref, push, onValue, set
+    } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA3E3Ls71E8AZqabdKDboohTaSVZY0MjdA",
+      authDomain: "keiba-f3b7c.firebaseapp.com",
+      databaseURL: "https://keiba-f3b7c-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "keiba-f3b7c",
+      storageBucket: "keiba-f3b7c.firebasestorage.app",
+      messagingSenderId: "691422686915",
+      appId: "1:691422686915:web:b9d29c086eeed69591bc76",
+      measurementId: "G-4DVFB5ZZXG"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const horses = ["馬刺し", "ゆたぽん", "山本"];
+    const horsesDiv = document.getElementById("horses");
+    const messageDiv = document.getElementById("message");
+    const infoDiv = document.getElementById("info");
+
+    function renderHorseButtons(enabled=true) {
+      horsesDiv.innerHTML = horses.map(h => `<div class="horse${enabled ? "" : " disabled"}" data-name="${h}">${h}</div>`).join("");
+      if (enabled) {
+        document.querySelectorAll(".horse").forEach(div => {
+          div.addEventListener("click", async () => {
+            if (localStorage.getItem("votedHorse")) return; // 二重投票防止
+            const horse = div.dataset.name;
+            localStorage.setItem("votedHorse", horse);
+            // 投票記録（timestamp をつける）
+            await push(ref(db, "votes"), { horse, ts: Date.now() });
+            messageDiv.textContent = `「${horse}」に投票しました！`;
+            showButtons(false);
+          });
+        });
+      }
+    }
+
+    function showButtons(enable) {
+      if (enable) renderHorseButtons(true);
+      else {
+        // ボタンを無効化表示
+        horsesDiv.innerHTML = horses.map(h => `<div class="horse disabled" data-name="${h}">${h}</div>`).join("");
+      }
+    }
+
+    // 初期表示：ボタン（ただし localStorage があれば非表示）
+    const already = localStorage.getItem("votedHorse");
+    if (already) {
+      showButtons(false);
+      messageDiv.textContent = `あなたは「${already}」に投票済みです。`;
+    } else {
+      renderHorseButtons(true);
+      messageDiv.textContent = "";
+    }
+
+    // --- winner をリアルタイム監視 ---
+    const winnerRef = ref(db, "winner");
+    onValue(winnerRef, snapshot => {
+      if (snapshot.exists()) {
+        const winner = snapshot.val();
+        const voted = localStorage.getItem("votedHorse");
+        if (voted) {
+          if (voted === winner) {
+            messageDiv.textContent = `🎉「${winner}」が勝ちました！おめでとう！🎉`;
+          } else {
+            messageDiv.textContent = `結果：「${winner}」が勝ちました。残念！`;
+          }
+          // 投票した人はボタン非表示のまま（任意で再表示するなら reset 後）
+          showButtons(false);
+        } else {
+          // 投票していない人の表示（任意）
+          messageDiv.textContent = `結果：「${winner}」が勝ちました。`;
+        }
+      } else {
+        // winner が消された（未設定）
+        // 何もしない or 情報更新
+      }
+    });
+
+    // --- reset をリアルタイム監視 ---
+    const resetRef = ref(db, "reset");
+    onValue(resetRef, snapshot => {
+      if (snapshot.exists() && snapshot.val() === true) {
+        // 管理者がリセットを実行した
+        localStorage.removeItem("votedHorse");
+        messageDiv.textContent = "再投票が可能になりました。馬を選んでください。";
+        renderHorseButtons(true);
+      } else {
+        // reset が false のときは特に何もしない
+      }
+    });
+
+    // --- 投票数や簡易情報の表示（オプション） ---
+    const votesRef = ref(db, "votes");
+    onValue(votesRef, snapshot => {
+      const counts = {};
+      horses.forEach(h => counts[h] = 0);
+      snapshot.forEach(child => {
+        const v = child.val();
+        if (v && v.horse && counts.hasOwnProperty(v.horse)) counts[v.horse]++;
+      });
+      const total = snapshot.size || 0;
+      infoDiv.textContent = `現在の合計投票数: ${total}（${horses.map(h => `${h}:${counts[h]}`).join(" / ") }）`;
+    });
+
+  </script>
+</body>
+</html>
