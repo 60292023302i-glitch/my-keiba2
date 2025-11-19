@@ -6,12 +6,45 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body { font-family: sans-serif; text-align: center; background: #f8f8f8; padding:20px; }
-    .horse { margin: 10px; padding: 15px; background: white; display: inline-block; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 120px; }
+    .horse { margin: 10px; padding: 15px; background: white; display: inline-block; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 140px; }
     .horse.disabled { opacity: 0.5; cursor: default; }
     .horse:hover { background: #e0f7fa; }
     h2 { color: #333; }
     #message { margin-top:20px;font-size:18px; min-height:28px; }
     #info { margin-top:10px; color:#666; font-size:13px; }
+
+    /* winnerImages を 3列×2行 のグリッドにして画像を大きく表示 */
+    #winnerImages {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr); /* 横3列 */
+      grid-template-rows: repeat(2, auto);   /* 縦2行 */
+      gap: 14px;
+      justify-items: center;
+      align-items: center;
+      max-width: 1040px; /* グリッド全体の最大幅 */
+      margin: 18px auto;
+      padding: 8px;
+    }
+
+    #winnerImages img {
+      width: 320px;       /* 各画像を大きめに */
+      height: 220px;      /* 固定高さにして見た目を揃える */
+      object-fit: cover;  /* トリミングして枠いっぱいに */
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      display: block;
+    }
+
+    /* 小さい画面では列数を落とす（レスポンシブ） */
+    @media (max-width: 1100px) {
+      #winnerImages img { width: 300px; height: 200px; }
+      #winnerImages { grid-template-columns: repeat(2, 1fr); } /* 2列 */
+    }
+    @media (max-width: 640px) {
+      #winnerImages img { width: 100%; height: 180px; }
+      #winnerImages { grid-template-columns: 1fr; } /* 1列 */
+      .horse { width: 120px; }
+    }
   </style>
 </head>
 <body>
@@ -20,12 +53,16 @@
 
   <div id="horses"></div>
   <div id="message"></div>
+
+  <!-- 勝った馬の写真（当てた人だけに表示） -->
+  <div id="winnerImages" aria-live="polite"></div>
+
   <div id="info"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
     import {
-      getDatabase, ref, push, onValue, set
+      getDatabase, ref, push, onValue
     } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
     const firebaseConfig = {
@@ -46,16 +83,57 @@
     const horsesDiv = document.getElementById("horses");
     const messageDiv = document.getElementById("message");
     const infoDiv = document.getElementById("info");
+    const imagesDiv = document.getElementById("winnerImages");
+
+    // 画像フォルダ A に対応（各馬6枚）
+    const horseImages = {
+      "馬刺し": [
+        "A/basashi1.JPG",
+        "A/basashi2.JPG",
+        "A/basashi3.JPG",
+        "A/basashi4.JPG",
+        "A/basashi5.JPG",
+        "A/basashi6.JPG"
+      ],
+      "ゆたぽん": [
+        "A/yutapon1.JPG",
+        "A/yutapon2.JPG",
+        "A/yutapon3.JPG",
+        "A/yutapon4.JPG",
+        "A/yutapon5.JPG",
+        "A/yutapon6.JPG"
+      ],
+      "山本": [
+        "A/yamamoto1.JPG",
+        "A/yamamoto2.JPG",
+        "A/yamamoto3.JPG",
+        "A/yamamoto4.JPG",
+        "A/yamamoto5.JPG",
+        "A/yamamoto6.JPG"
+      ]
+    };
+
+    function showWinnerImages(winner) {
+      imagesDiv.innerHTML = "";
+      const imgs = horseImages[winner] || [];
+      // 画像は最大6枚を想定（縦2×横3）
+      imgs.slice(0, 6).forEach((src, idx) => {
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = `${winner} の写真 ${idx + 1}`;
+        imagesDiv.appendChild(img);
+      });
+    }
 
     function renderHorseButtons(enabled=true) {
       horsesDiv.innerHTML = horses.map(h => `<div class="horse${enabled ? "" : " disabled"}" data-name="${h}">${h}</div>`).join("");
       if (enabled) {
         document.querySelectorAll(".horse").forEach(div => {
           div.addEventListener("click", async () => {
-            if (localStorage.getItem("votedHorse")) return; // 二重投票防止
+            if (localStorage.getItem("votedHorse")) return;
             const horse = div.dataset.name;
             localStorage.setItem("votedHorse", horse);
-            // 投票記録（timestamp をつける）
+
             await push(ref(db, "votes"), { horse, ts: Date.now() });
             messageDiv.textContent = `「${horse}」に投票しました！`;
             showButtons(false);
@@ -67,70 +145,63 @@
     function showButtons(enable) {
       if (enable) renderHorseButtons(true);
       else {
-        // ボタンを無効化表示
-        horsesDiv.innerHTML = horses.map(h => `<div class="horse disabled" data-name="${h}">${h}</div>`).join("");
+        horsesDiv.innerHTML = horses.map(h => `<div class="horse disabled">${h}</div>`).join("");
       }
     }
 
-    // 初期表示：ボタン（ただし localStorage があれば非表示）
+    // 初回表示
     const already = localStorage.getItem("votedHorse");
     if (already) {
       showButtons(false);
       messageDiv.textContent = `あなたは「${already}」に投票済みです。`;
     } else {
       renderHorseButtons(true);
-      messageDiv.textContent = "";
     }
 
-    // --- winner をリアルタイム監視 ---
+    // --- winner の監視 ---
     const winnerRef = ref(db, "winner");
     onValue(winnerRef, snapshot => {
-      if (snapshot.exists()) {
-        const winner = snapshot.val();
-        const voted = localStorage.getItem("votedHorse");
-        if (voted) {
-          if (voted === winner) {
-            messageDiv.textContent = `🎉「${winner}」が勝ちました！おめでとう！🎉`;
-          } else {
-            messageDiv.textContent = `結果：「${winner}」が勝ちました。残念！`;
-          }
-          // 投票した人はボタン非表示のまま（任意で再表示するなら reset 後）
-          showButtons(false);
-        } else {
-          // 投票していない人の表示（任意）
-          messageDiv.textContent = `結果：「${winner}」が勝ちました。`;
-        }
+      if (!snapshot.exists()) return;
+      const winner = snapshot.val();
+      const voted = localStorage.getItem("votedHorse");
+
+      if (voted === winner) {
+        messageDiv.textContent = `🎉「${winner}」が勝ちました！おめでとう！🎉`;
+        showWinnerImages(winner);  // 当てた人だけ画像表示
       } else {
-        // winner が消された（未設定）
-        // 何もしない or 情報更新
+        messageDiv.textContent = `結果：「${winner}」が勝ちました。`;
+        imagesDiv.innerHTML = "";  // はずれた人は画像非表示
       }
+
+      showButtons(false);
     });
 
-    // --- reset をリアルタイム監視 ---
+    // reset 監視
     const resetRef = ref(db, "reset");
     onValue(resetRef, snapshot => {
       if (snapshot.exists() && snapshot.val() === true) {
-        // 管理者がリセットを実行した
         localStorage.removeItem("votedHorse");
+        imagesDiv.innerHTML = "";
         messageDiv.textContent = "再投票が可能になりました。馬を選んでください。";
         renderHorseButtons(true);
-      } else {
-        // reset が false のときは特に何もしない
       }
     });
 
-    // --- 投票数や簡易情報の表示（オプション） ---
+    // 投票数表示
     const votesRef = ref(db, "votes");
     onValue(votesRef, snapshot => {
       const counts = {};
       horses.forEach(h => counts[h] = 0);
       snapshot.forEach(child => {
         const v = child.val();
-        if (v && v.horse && counts.hasOwnProperty(v.horse)) counts[v.horse]++;
+        if (v && v.horse && counts[v.horse] !== undefined) counts[v.horse]++;
       });
       const total = snapshot.size || 0;
-      infoDiv.textContent = `現在の合計投票数: ${total}（${horses.map(h => `${h}:${counts[h]}`).join(" / ") }）`;
+      infoDiv.textContent = `現在の合計投票数: ${total}`;
     });
+  </script>
+</body>
+</html>
 
   </script>
 </body>
