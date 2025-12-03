@@ -45,9 +45,44 @@
       #winnerImages { grid-template-columns: 1fr; } /* 1列 */
       .horse { width: 120px; }
     }
+
+    /* ← 戻るボタン（左上に固定） */
+    .back-btn {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #ffffff;
+      color: #1f2937;
+      text-decoration: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+      font-weight: 600;
+      z-index: 9999;
+    }
+    .back-btn:hover {
+      transform: translateY(-2px);
+    }
+    .back-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
+  <!-- 左上の戻るボタン -->
+  <a class="back-btn" href="https://243193306.hs-sites-na2.com/%E3%83%AC%E3%83%BC%E3%82%B9%E9%81%B8%E6%8A%9E%E5%BE%8C" aria-label="前のページに戻る">
+    <!-- 矢印SVG -->
+    <svg class="back-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    戻る
+  </a>
+
   <h1>🏇 競馬予想大会 🏇</h1>
   <h2>あなたが勝つと思う馬を選んでください</h2>
 
@@ -116,7 +151,6 @@
     function showWinnerImages(winner) {
       imagesDiv.innerHTML = "";
       const imgs = horseImages[winner] || [];
-      // 画像は最大6枚を想定（縦2×横3）
       imgs.slice(0, 6).forEach((src, idx) => {
         const img = document.createElement("img");
         img.src = src;
